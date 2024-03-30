@@ -2,9 +2,11 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext
 from tkinter.ttk import Progressbar
 import threading
-from app.image_processor import batch_convert_raw_to_jpeg
+import app.image_processor
 import logging
-from app.utils import setup_logging
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
 
 class ImageToolboxGUI:
     def __init__(self, master):
@@ -13,17 +15,29 @@ class ImageToolboxGUI:
 
         self.configure_gui()
         self.create_widgets()
-        setup_logging()
 
     def configure_gui(self):
-        self.master.geometry("600x400")  # Adjust window size as needed
+        self.master.geometry("600x800")  # Adjust window size as needed
 
     def create_widgets(self):
-        # Input and Output Directory Selection
-        self.create_directory_widgets()
-        
+        # Input Directory Label and Entry
+        self.label_input_dir = tk.Label(self.master, text="Select Input Folder:")
+        self.label_input_dir.pack(pady=(10,0))
+        self.input_dir_path = tk.Entry(self.master, width=60)
+        self.input_dir_path.pack(pady=5)
+        self.browse_input_button = tk.Button(self.master, text="Browse Input Folder", command=self.browse_input_folder)
+        self.browse_input_button.pack(pady=5)
+
+        # Output Directory Label and Entry
+        self.label_output_dir = tk.Label(self.master, text="Select Output Folder:")
+        self.label_output_dir.pack(pady=(10,0))
+        self.output_dir_path = tk.Entry(self.master, width=60)
+        self.output_dir_path.pack(pady=5)
+        self.browse_output_button = tk.Button(self.master, text="Browse Output Folder", command=self.browse_output_folder)
+        self.browse_output_button.pack(pady=5)
+
         # Progress Bar
-        self.progress = Progressbar(self.master, orient=tk.HORIZONTAL, length=100, mode='determinate')
+        self.progress = Progressbar(self.master, orient=tk.HORIZONTAL, length=300, mode='determinate')
         self.progress.pack(pady=20)
 
         # Log Viewer
@@ -35,54 +49,52 @@ class ImageToolboxGUI:
         self.start_button = tk.Button(self.master, text="Start Processing", command=self.start_processing)
         self.start_button.pack(pady=10)
 
-    def create_directory_widgets(self):
-        # Similar to previous implementation, define here your directory widgets (input/output)
-        pass
-
     def browse_input_folder(self):
-        # Your existing implementation
-        pass
+        folder_selected = filedialog.askdirectory()
+        if folder_selected:
+            self.input_dir_path.delete(0, tk.END)
+            self.input_dir_path.insert(0, folder_selected)
 
     def browse_output_folder(self):
-        # Your existing implementation
-        pass
+        folder_selected = filedialog.askdirectory()
+        if folder_selected:
+            self.output_dir_path.delete(0, tk.END)
+            self.output_dir_path.insert(0, folder_selected)
 
-    def update_progress(self, progress, error=None):
-        # Safe way to update progress bar from different thread
-        self.progress['value'] = progress
-        if error:
-            self.log(f"Error: {error}")
-    
-    def log(self, message):
-        # Safe way to update log viewer from different thread
+    def log_message(self, message):
         self.log_viewer.configure(state='normal')
         self.log_viewer.insert(tk.END, message + "\n")
         self.log_viewer.configure(state='disabled')
         self.log_viewer.yview(tk.END)
 
+    def update_progress(self, progress):
+        self.progress['value'] = progress
+        self.master.update_idletasks()
+
     def start_processing(self):
         input_dir = self.input_dir_path.get()
         output_dir = self.output_dir_path.get()
+        self.process_images(input_dir, output_dir, None)
         if not input_dir or not output_dir:
             messagebox.showinfo("Information", "Please select both input and output folders.")
             return
 
-        # Disable the start button to prevent multiple clicks
-        self.start_button.config(state='disabled')
+        self.start_button.config(state='enabled')
 
-        # Start the image processing in a separate thread
-        threading.Thread(target=self.process_images, args=(input_dir, output_dir), daemon=True).start()
-
-    def process_images(self, input_dir, output_dir):
+        # Define a callback for updating the GUI from another thread
         def callback(progress, error=None):
-            # Use 'after' to schedule the update_progress call in the main GUI thread
-            self.master.after(100, self.update_progress, progress, error)
+            self.master.after(0, self.update_progress, progress)
+            if error:
+                self.master.after(0, self.log_message, f"Error: {error}")
 
-        batch_convert_raw_to_jpeg(input_dir, output_dir, progress_callback=callback)
+        threading.Thread(target=lambda: self.process_images(input_dir, output_dir, callback), daemon=True).start()
 
-        # Re-enable the start button after processing is complete
-        self.start_button.config(state='normal')
-        self.log("Processing completed.")
+    def process_images(self, input_dir, output_dir, callback):
+        from .image_processor import predict_images, scan_directory_for_images
+        image_path = scan_directory_for_images(self.input_dir_path.get())
+        predict_images(image_path, self.log_message)
+        self.master.after(0, self.log_message, "Processing completed.")
+        self.master.after(0, self.start_button.config, {'state': 'normal'})
 
 def run_app():
     root = tk.Tk()

@@ -5,8 +5,10 @@ from PIL import Image
 import magic
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import app.gui
 from tensorflow.keras.preprocessing import image
 from tensorflow.keras.applications import  EfficientNetB7, MobileNetV2, ResNet50, InceptionV3
+
 # For MobileNetV2
 from tensorflow.keras.applications.mobilenet_v2 import decode_predictions, preprocess_input
 
@@ -26,6 +28,16 @@ models = {
     'InceptionV3': InceptionV3(weights='imagenet')
 }
 
+def get_photo_type_with_pillow(file_path):
+    try:
+        with Image.open(file_path) as img:
+            return img.format
+    except IOError:
+        return "Not a valid image file or unsupported format"
+
+def get_photo_type_with_magic(file_path):
+    mime = magic.Magic(mime=True)
+    return mime.from_file(file_path)
 
 def convert_raw_to_jpeg(raw_image_path, output_path):
     """
@@ -51,7 +63,26 @@ def convert_raw_to_jpeg(raw_image_path, output_path):
     except Exception as e:
         print(f"Error converting {raw_image_path}: {e}")
 
-def predict_image(model, photo_path):
+def predict_images(image_paths,log_callback=None):
+    results = []
+    for photo_path in image_paths:
+        if log_callback:
+            log_callback(f"Processing {photo_path}...")
+        #app.gui.log_message(f"Processing {photo_path}...")
+        photo_results = {'image': photo_path}
+        for model_name, model in models.items():
+            try:
+                predictions = predict_image(model,photo_path,log_callback)
+                photo_results[model_name] = predictions[0][1]  # Storing top prediction
+                if log_callback:
+                    log_callback(f"Prediction made with {model_name} for {photo_path}: {predictions}")
+            except Exception as e:
+                if log_callback:
+                    log_callback(f"Error making prediction with {model_name} for {photo_path}: {e}")
+        results.append(photo_results)
+    return results
+def predict_image(model,photo_path):
+
     img = image.load_img(photo_path, target_size=model.input_shape[1:3])
     img_array = image.img_to_array(img)
     img_array_expanded_dims = np.expand_dims(img_array, axis=0)
@@ -74,28 +105,8 @@ def scan_directory_for_images(directory_path):
                 image_paths.append(full_path)
     return image_paths
 
-
-
-def batch_convert_raw_to_jpeg(directory_path, output_path):
-    """
-    Converts all RAW images in a directory to JPEG format.
-    
-    Parameters:
-    - directory_path: The directory containing RAW images.
-    - output_path: The directory where the converted JPEG images will be saved.
-    """
-    # Ensure the output directory exists
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
-    
-    # Iterate over all files in the directory
-    for filename in os.listdir(directory_path):
-        if filename.lower().endswith(('.raw', '.cr2', '.nef', '.arw', '.dng')):
-            raw_image_path = os.path.join(directory_path, filename)
-            convert_raw_to_jpeg(raw_image_path, output_path)
-
 if __name__ == "__main__":
     # Example usage
-    directory_path = 'path/to/raw/images'
-    output_path = 'path/to/save/jpeg'
-    batch_convert_raw_to_jpeg(directory_path, output_path)
+    image_paths = scan_directory_for_images(app.gui.self.output_dir_path.get())
+    predict_images(models, image_paths)
+    #convert_raw_to_jpeg(directory_path, output_path)

@@ -1,3 +1,5 @@
+import sys
+sys.path.append('D:\\ImageToolbox')  # Adjust this path as necessary
 import logging
 from app.gui import run_app
 from app.utils import setup_logging
