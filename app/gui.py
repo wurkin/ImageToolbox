@@ -35,7 +35,8 @@ class ImageToolboxGUI:
         self.output_dir_path.pack(pady=5)
         self.browse_output_button = tk.Button(self.master, text="Browse Output Folder", command=self.browse_output_folder)
         self.browse_output_button.pack(pady=5)
-
+        self.input_dir_path.insert(0, r'D:\Pictures\gdrive')
+        self.output_dir_path.insert(0, r'G:\completed_test')
         # Progress Bar
         self.progress = Progressbar(self.master, orient=tk.HORIZONTAL, length=300, mode='determinate')
         self.progress.pack(pady=20)
@@ -43,7 +44,7 @@ class ImageToolboxGUI:
         # Log Viewer
         self.log_viewer = scrolledtext.ScrolledText(self.master, height=10)
         self.log_viewer.pack(pady=10)
-        self.log_viewer.configure(state ='disabled')
+        self.log_viewer.configure(state ='normal')
 
         # Start Processing Button
         self.start_button = tk.Button(self.master, text="Start Processing", command=self.start_processing)
@@ -62,11 +63,13 @@ class ImageToolboxGUI:
             self.output_dir_path.insert(0, folder_selected)
 
     def log_message(self, message):
-        self.log_viewer.configure(state='normal')
-        self.log_viewer.insert(tk.END, message + "\n")
-        self.log_viewer.configure(state='disabled')
-        self.log_viewer.yview(tk.END)
-
+        def update_log():
+            self.log_viewer.configure(state='normal')
+            self.log_viewer.insert(tk.END, message + "\n")
+            self.log_viewer.configure(state='disabled')
+            self.log_viewer.yview(tk.END)
+        self.master.after(0, update_log)
+    
     def update_progress(self, progress):
         self.progress['value'] = progress
         self.master.update_idletasks()
@@ -74,12 +77,13 @@ class ImageToolboxGUI:
     def start_processing(self):
         input_dir = self.input_dir_path.get()
         output_dir = self.output_dir_path.get()
-        self.process_images(input_dir, output_dir, None)
+
+
         if not input_dir or not output_dir:
             messagebox.showinfo("Information", "Please select both input and output folders.")
             return
 
-        self.start_button.config(state='enabled')
+        self.start_button.config(state='normal')
 
         # Define a callback for updating the GUI from another thread
         def callback(progress, error=None):
@@ -87,7 +91,7 @@ class ImageToolboxGUI:
             if error:
                 self.master.after(0, self.log_message, f"Error: {error}")
 
-        threading.Thread(target=lambda: self.process_images(input_dir, output_dir, callback), daemon=True).start()
+        threading.Thread(target=lambda: self.process_images(input_dir, output_dir, self.log_message), daemon=True).start()
 
     def process_images(self, input_dir, output_dir, callback):
         from .image_processor import predict_images, scan_directory_for_images
